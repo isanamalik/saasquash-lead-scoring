@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LeadScoringApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0c575a9cca205c716cc48b864d0cdfe3696ca607")]
 [assembly: System.Reflection.AssemblyProductAttribute("LeadScoringApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LeadScoringApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

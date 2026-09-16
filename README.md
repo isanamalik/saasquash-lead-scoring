@@ -1,104 +1,111 @@
 # SaaSquatch Lead Scoring & Prioritization System
 
-A production-ready lead scoring API with real-time prioritization dashboard, built for the Caprae Capital technical assessment.
+A lead scoring API with a real-time prioritization dashboard, built for the Caprae Capital technical assessment.
 
 ## Overview
 
-This system scores and tiers B2B leads based on multiple business signals (company size, funding stage, tech stack alignment, location, revenue) and surfaces them through an intuitive React dashboard with sorting, filtering, and CSV export capabilities.
+This system scores and tiers B2B leads based on signals that actually matter for a search-fund/ETA buyer — company size, ownership structure, revenue, operational maturity, and location — then surfaces them through a React dashboard with search, tier filtering, a per-lead score breakdown, and CSV export.
+
+The scoring logic is deliberately built around **acquirability**, not growth-stage hype. A lead that looks impressive by SaaS standards (VC-funded, 800 employees, $75M revenue) is actively the _wrong_ target for this audience, and the model scores it accordingly.
 
 ## Architecture
 
 ### Backend: ASP.NET Core Minimal API
-- **Framework**: .NET 10 with C# minimal API pattern
-- **Scoring Engine**: Rule-based weighted scoring system (pure functions, testable)
-- **Data Layer**: In-memory mock data (50 realistic B2B leads)
-- **API Endpoints**:
-  - `GET /api/leads` - Returns all scored leads
-  - `GET /api/leads/{id}` - Returns single scored lead
-  - `GET /api/leads/tier/{tier}` - Filter by tier (A/B/C/D)
+
+- **Framework**: .NET 10, minimal API pattern
+- **Scoring engine**: rule-based, weighted, pure-function scoring (`LeadScoringService`) — fully testable, no black box
+- **Data layer**: in-memory mock data (28 leads), `Models/Lead.cs` as the shared model
+- **Endpoints**:
+  - `GET /api/leads` — all leads, scored and tiered
+  - `GET /api/leads/{id}` — single scored lead
+  - `GET /api/leads/tier/{tier}` — filter by tier (A/B/C/D)
 
 ### Frontend: React + Vite
-- **Framework**: React 18 with hooks (useState, useEffect, useMemo)
-- **Build Tool**: Vite for fast dev/build cycles
-- **Features**: 
-  - Real-time table sorting (company, score, tier, employees, revenue)
-  - Tier filtering (A/B/C/D)
-  - Visual tier badges with color coding
-  - Summary statistics dashboard
-  - CSV export for filtered/sorted results
 
-### Scoring Algorithm
+- Sidebar with live tier counts (A–D) and total leads
+- Search across company, industry, and location
+- Tier filter chips
+- Card grid with a circular score indicator per lead
+- Detail modal with a per-category score breakdown (visual bar per factor)
+- CSV export of the current filtered/sorted view
 
-Each lead receives 0-100 points across five categories:
+## Scoring Algorithm
 
-| Category | Weight | Logic |
-|----------|--------|-------|
-| Company Size | 25 pts | 500+ employees = 25, 100-499 = 20, 50-99 = 15, 10-49 = 10, <10 = 5 |
-| Funding Stage | 25 pts | Series C+ = 25, Series B = 20, Series A = 15, Seed = 10, Bootstrap = 5 |
-| Revenue | 20 pts | $50M+ = 20, $10M+ = 15, $1M+ = 10, $100K+ = 5 |
-| Tech Stack Match | 30 pts | 5 pts per matching technology (React, .NET, Azure, AWS, Node.js, Python) |
-| Location | 10 pts | US/Canada/UK/Germany = 10, Other = 0 |
+Each lead receives 0–100 points across five categories, weighted by how much each one actually predicts acquirability for a search-fund buyer — not by how much VC money or headcount growth a company has.
 
-**Tier Assignment**:
-- **Tier A** (70-100): High-priority, ideal customer profile
-- **Tier B** (50-69): Strong prospect, good fit
-- **Tier C** (30-49): Moderate fit, nurture campaign
-- **Tier D** (<30): Low priority, long-term watch
+| Category                 | Weight | Logic                                                                                                                                                                                            |
+| ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Company Size**         | 25 pts | 10–150 employees = 25 (sweet spot — real business, still acquirable). <10 = 15. 150–300 = 12. 300+ = 3 (enterprise scale, not a realistic target)                                                |
+| **Ownership Structure**  | 25 pts | Bootstrapped / Family-Owned / Self-Funded = 25 (actually for sale). Seed = 15. Series A = 8. Series B = 3. Series C+ = 0 (not acquirable this way — optimizing for growth, not a sale)           |
+| **Revenue**              | 20 pts | $1M–$20M = 20 (classic lower-middle-market range). $300K–$1M = 8. $20M–$50M = 10. $50M+ = 3                                                                                                      |
+| **Operational Maturity** | 15 pts | 5 pts per recognized small-business tool in use (QuickBooks, ServiceTitan, Salesforce, Xero, Shopify, Square, HubSpot), capped at 15 — signals the business runs on real systems, not just paper |
+| **Location**             | 15 pts | US / Canada / UK / Germany = 15 — established search-fund and ETA-friendly jurisdictions                                                                                                         |
+
+**Tier assignment**:
+
+- **Tier A** (80–100): High-priority — small, owner-operated, revenue-generating, acquirable
+- **Tier B** (60–79): Strong prospect, good fit with one or two weaker signals
+- **Tier C** (40–59): Moderate fit — worth a longer-term watch
+- **Tier D** (<40): Low priority — usually too large, too VC-backed, or too early to be a realistic acquisition target
 
 ## Technology Decisions & Rationale
 
 ### Why .NET Minimal API?
-- **Production alignment**: Matches my professional stack (C#, Azure, EF Core)
-- **Performance**: Lightweight, fast cold-start for serverless deployment
-- **Maintainability**: Clear separation (models, services, data layers)
 
-### Why Rule-Based Scoring vs. ML?
-- **Time constraint**: 5-hour challenge doesn't allow proper ML model training/validation
-- **Interpretability**: Business users can understand and adjust scoring rules
-- **Production-ready**: No model drift, retraining pipelines, or MLOps overhead
-- **Accuracy**: For 50 leads, rules perform comparably to basic ML
+- **Production alignment**: matches my professional stack (C#, Azure, EF Core)
+- **Performance**: lightweight, fast cold-start for serverless deployment
+- **Maintainability**: clear separation between models, services, and data
 
-### Why In-Memory Data?
-- **Simplicity**: No DB setup/migration for demo
-- **Production path**: Trivial swap to EF Core + Azure SQL or Cosmos DB
+### Why rule-based scoring instead of ML?
 
-### Deployment Strategy (Production)
+- **Time constraint**: a 5-hour challenge doesn't allow for proper ML training/validation
+- **Interpretability**: a business user can read the five categories and immediately understand — and adjust — why a lead scored the way it did. That transparency matters more here than marginal accuracy gains, especially for a first version of a scoring tool a non-technical buyer will actually use
+- **No MLOps overhead**: no model drift, no retraining pipeline, nothing to monitor
+- **Right-sized**: for a few dozen to a few hundred leads, well-chosen rules perform comparably to a basic model, without the operational cost
 
-**Backend**:
-- Azure App Service (Windows, .NET 10 runtime)
-- OR Azure Functions (consumption plan for cost efficiency)
-- App Insights for monitoring/telemetry
+### Why in-memory data?
 
-**Frontend**:
+- **Simplicity**: no DB setup or migration needed for a demo
+- **Clear production path**: trivial swap to EF Core + Azure SQL or Cosmos DB once real data sources (Apollo, LinkedIn, Crunchbase, Google Maps, Growjo) are wired in
+
+### Deployment strategy (production)
+
+**Backend**
+
+- Azure App Service (.NET runtime) or Azure Functions (consumption plan, cost-efficient for spiky scoring workloads)
+- Application Insights for monitoring and telemetry
+
+**Frontend**
+
 - Azure Static Web Apps (global CDN, auto-HTTPS)
-- OR Azure Blob Storage + CDN
 
-**CI/CD**:
-- GitHub Actions workflow:
-  ```yaml
-  - Backend: dotnet build → dotnet test → az webapp deploy
-  - Frontend: npm build → az staticwebapp deploy
-  ```
+**CI/CD** — GitHub Actions:
 
-**Infrastructure as Code**:
-- Bicep templates for resource provisioning
-- Key Vault for secrets (connection strings, API keys)
+```yaml
+- Backend: dotnet build → dotnet test → az webapp deploy
+- Frontend: npm build → az staticwebapp deploy
+```
+
+**Infrastructure as code**: Bicep templates for provisioning; Key Vault for secrets (connection strings, API keys)
 
 ## Running Locally
 
 ### Prerequisites
+
 - .NET 10 SDK
 - Node.js 18+
 
 ### Backend
+
 ```bash
 cd LeadScoringApi
 dotnet restore
 dotnet run --launch-profile http
-# API runs on http://localhost:5000
+# API runs on http://localhost:5001
 ```
 
 ### Frontend
+
 ```bash
 cd lead-scoring-ui
 npm install
@@ -109,46 +116,36 @@ npm run dev
 ## Testing
 
 ```bash
-# Backend
-cd LeadScoringApi
-dotnet test
-
-# Frontend
-cd lead-scoring-ui
-npm run test
-
 # API smoke test
-curl http://localhost:5000/api/leads
+curl http://localhost:5001/api/leads
+curl http://localhost:5001/api/leads/tier/A
 ```
 
-## Business Value Proposition
+## Business Value
 
-This system directly addresses search fund pain points:
+This system directly addresses a core search-fund pain point: SaaSquatch surfaces hundreds of leads from Apollo, LinkedIn, Crunchbase, Google Maps, and Growjo, but not all leads are equally worth a searcher's time.
 
-1. **Prioritization**: Automatically surfaces highest-quality leads (Tier A) from hundreds of prospects
-2. **Time Savings**: Sales teams focus on 70+ score leads first (3x conversion rate vs. D tier)
-3. **Data-Driven**: Removes guesswork from lead qualification
-4. **Scalability**: Handles thousands of leads; scoring logic runs in <50ms per lead
-5. **Actionable**: CSV export integrates with existing CRM workflows
+1. **Prioritization**: automatically surfaces the businesses that are actually small enough, bootstrapped enough, and profitable enough to be realistic acquisition targets — not just the biggest or most "impressive" companies in the dataset
+2. **Time savings**: a searcher can focus outreach on Tier A leads first instead of manually filtering hundreds of rows
+3. **Transparency**: the score breakdown means a searcher can see _why_ a lead ranked where it did, and challenge or tune the weights if their thesis differs
+4. **Data-driven, not vibes-driven**: removes the guesswork of "does this company look good" and replaces it with explicit, adjustable criteria
+5. **CRM-ready**: CSV export slots into existing outreach workflows
 
 ## Extensions for Production
 
-- [ ] PostgreSQL/SQL Server persistence with EF Core
+- [ ] Persistent storage (EF Core + Azure SQL) once wired to real SaaSquatch data sources
 - [ ] Authentication (Azure AD B2C)
-- [ ] Lead detail view with score breakdown visualization
-- [ ] Historical scoring trends (track score changes over time)
-- [ ] Webhooks for CRM integration (Salesforce, HubSpot)
-- [ ] A/B test scoring rules against conversion data
-- [ ] ML model (gradient boosting) trained on closed deals
+- [ ] User-adjustable scoring weights (let each searcher tune the model to their own thesis)
+- [ ] Historical score tracking (watch how a lead's score changes as it's updated)
+- [ ] CRM webhooks (HubSpot, Salesforce, Pipedrive)
+- [ ] Validate/recalibrate weights against actual closed acquisitions over time
 
 ## Project Stats
 
-- **Backend**: 4 files, ~300 LOC (C#)
-- **Frontend**: 2 files, ~250 LOC (React)
-- **Mock Data**: 50 realistic B2B leads
-- **API Response Time**: <50ms (in-memory)
-- **Build Time**: <10s
+- **Backend**: `Models/Lead.cs`, `Services/LeadScoringService.cs`, `Data/MockLeadData.cs`, `Program.cs`
+- **Mock data**: 28 leads — a deliberate mix of acquirable small businesses and a handful of VC-scale companies included specifically to demonstrate the model correctly deprioritizing them
+- **API response time**: <50ms (in-memory)
 
 ---
 
-Built for Caprae Capital Technical Assessment | September 2026
+Built for the Caprae Capital Technical Assessment | September 2026
