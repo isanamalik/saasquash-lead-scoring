@@ -14,7 +14,8 @@ The scoring logic is deliberately built around **acquirability**, not growth-sta
 
 - **Framework**: .NET 10, minimal API pattern
 - **Scoring engine**: rule-based, weighted, pure-function scoring (`LeadScoringService`) — fully testable, no black box
-- **Data layer**: in-memory mock data (28 leads), `Models/Lead.cs` as the shared model
+- **Data layer**: SQLite via EF Core (`LeadDbContext`) — a real, queryable database, not an in-memory list. `MockLeadData` now serves only as seed data, inserted once on first run by `DbSeeder`
+- **Model**: `Models/Lead.cs` as the shared entity/DTO
 - **Endpoints**:
   - `GET /api/leads` — all leads, scored and tiered
   - `GET /api/leads/{id}` — single scored lead
@@ -63,16 +64,23 @@ Each lead receives 0–100 points across five categories, weighted by how much e
 - **No MLOps overhead**: no model drift, no retraining pipeline, nothing to monitor
 - **Right-sized**: for a few dozen to a few hundred leads, well-chosen rules perform comparably to a basic model, without the operational cost
 
-### Why in-memory data?
+### Why SQLite (via EF Core)?
 
-- **Simplicity**: no DB setup or migration needed for a demo
-- **Clear production path**: trivial swap to EF Core + Azure SQL or Cosmos DB once real data sources (Apollo, LinkedIn, Crunchbase, Google Maps, Growjo) are wired in
+- **Real persistence, zero setup cost**: satisfies an actual data storage requirement without needing a hosted SQL Server/Postgres instance for a 5-hour demo
+- **Same code path as production**: because it's EF Core, not a custom in-memory shim, the queries (`ToListAsync`, `FindAsync`, LINQ filtering) are the same shape they'd be against Azure SQL
+- **Trivial production swap**: changing the provider from `UseSqlite(...)` to `UseSqlServer(...)` (plus a new connection string) is the entire migration — no rewrite of the data access layer
+- **Realistic seed data**: `MockLeadData` is inserted once via `DbSeeder` on first run (guarded so restarts don't duplicate rows), giving a real `.db` file with an inspectable schema rather than a hardcoded list
+
+### Live scraping vs. seed data
+
+Real-time scraping against SaaSquatch's actual sources (Apollo, LinkedIn, Crunchbase, Google Maps, Growjo) isn't feasible without API access to those platforms, so the 5 hours went into the scoring logic and the storage architecture instead of authentication plumbing. The seed data mirrors the shape and variety of what those sources would return.
 
 ### Deployment strategy (production)
 
 **Backend**
 
 - Azure App Service (.NET runtime) or Azure Functions (consumption plan, cost-efficient for spiky scoring workloads)
+- Azure SQL as the production database (drop-in EF Core provider swap from SQLite)
 - Application Insights for monitoring and telemetry
 
 **Frontend**
@@ -102,6 +110,7 @@ cd LeadScoringApi
 dotnet restore
 dotnet run --launch-profile http
 # API runs on http://localhost:5001
+# On first run, a leads.db SQLite file is created and seeded automatically
 ```
 
 ### Frontend
@@ -121,6 +130,8 @@ curl http://localhost:5001/api/leads
 curl http://localhost:5001/api/leads/tier/A
 ```
 
+Inspect the database directly with DB Browser for SQLite — open `leads.db` from the project root, check the **Database Structure** tab for the schema and **Browse Data** for the seeded rows.
+
 ## Business Value
 
 This system directly addresses a core search-fund pain point: SaaSquatch surfaces hundreds of leads from Apollo, LinkedIn, Crunchbase, Google Maps, and Growjo, but not all leads are equally worth a searcher's time.
@@ -133,7 +144,7 @@ This system directly addresses a core search-fund pain point: SaaSquatch surface
 
 ## Extensions for Production
 
-- [ ] Persistent storage (EF Core + Azure SQL) once wired to real SaaSquatch data sources
+- [ ] Swap SQLite for Azure SQL once wired to real SaaSquatch data sources (single provider-line change, per above)
 - [ ] Authentication (Azure AD B2C)
 - [ ] User-adjustable scoring weights (let each searcher tune the model to their own thesis)
 - [ ] Historical score tracking (watch how a lead's score changes as it's updated)
@@ -142,9 +153,10 @@ This system directly addresses a core search-fund pain point: SaaSquatch surface
 
 ## Project Stats
 
-- **Backend**: `Models/Lead.cs`, `Services/LeadScoringService.cs`, `Data/MockLeadData.cs`, `Program.cs`
-- **Mock data**: 28 leads — a deliberate mix of acquirable small businesses and a handful of VC-scale companies included specifically to demonstrate the model correctly deprioritizing them
-- **API response time**: <50ms (in-memory)
+- **Backend**: `Models/Lead.cs`, `Services/LeadScoringService.cs`, `Data/MockLeadData.cs` (seed data), `Data/LeadDbContext.cs`, `Data/DbSeeder.cs`, `Program.cs`
+- **Database**: SQLite (`leads.db`), created and seeded automatically on first run
+- **Seed data**: 28 leads — a deliberate mix of acquirable small businesses and a handful of VC-scale companies included specifically to demonstrate the model correctly deprioritizing them
+- **API response time**: <50ms
 
 ---
 
